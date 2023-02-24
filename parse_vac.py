@@ -18,8 +18,6 @@ proxies = {
 }
 
 auth = ('kakamar3787','8ac388')
-dateTimeObj = datetime.datetime.now()
-timestampStr = dateTimeObj.strftime("%H:%M:%S")
 
 
 def transliterate(name):
@@ -46,8 +44,6 @@ def translite_region(name):
    return name	
 
 area = config.HEADHUNTER_AREA_PARAM
-
-
 
 def init(name, page, salary, checkbox,region,education, exp,employment,work_time):
 	region_text = translite_region(region)
@@ -155,7 +151,7 @@ def get_page_content(content_links,dict):
 					}
 				)
 	for i in content:
-		responce = requests.get(i["link"], headers=config.HEADERS, proxies=proxies, auth=auth,  timeout=10)
+		responce = requests.get(i["link"], headers=config.HEADERS, timeout=10)
 		soup1 = BeautifulSoup(responce.text, "html.parser")
 		vacancies1 = soup1.find_all("div", attrs={'id':'HH-React-Root'})
 		if len(vacancies1) == 0:

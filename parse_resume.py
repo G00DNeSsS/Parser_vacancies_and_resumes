@@ -8,6 +8,7 @@ import datetime
 import PySimpleGUI as sg
 import time
 from threading import Thread
+import re
 
   
 
@@ -17,18 +18,8 @@ eject = b'iVBORw0KGgoAAAANSUhEUgAAADIAAAAyCAYAAAAeP4ixAAAABmJLR0QA/wD/AP+gvaeTAA
 
 bg = sg.LOOK_AND_FEEL_TABLE[sg.CURRENT_LOOK_AND_FEEL]['BACKGROUND']  
 
-s = requests.session()
-proxy = set()
 
-with open("proxies.txt", "r") as f:
-    file_lines1 = f.readlines()
-    for line1 in file_lines1:
-        proxy.add(line1.strip())
-        
-s.proxies = {
-    'http': 'http://'+random.choice(list(proxy))
-}
-
+GRAPH_SIZE= (100,100) 
 
 dateTimeObj = datetime.datetime.now()
 timestampStr = dateTimeObj.strftime("%H:%M:%S")
@@ -64,7 +55,7 @@ area = config.HEADHUNTER_AREA_PARAM
 
 	
 def init(name_resume, page_resume, region, salary_before, salary_after, salary_checkbox,relocation,
-	exp,gender,gender_checbox,age_before, age_after,age_checkbox,education,employment,time_work,status_work):
+	exp,gender,gender_checbox,age_before, age_after,age_checkbox,education,employment,time_work,status_work,val):
 	
 	region_text = translite_region(region)
 	text_work = name_resume
@@ -90,7 +81,8 @@ def init(name_resume, page_resume, region, salary_before, salary_after, salary_c
 		"education" : education,
 		"employment" : employment,
 		"work_time" : time_work,
-		"status_work": status_work
+		"status_work": status_work,
+		"val" : val
 	}
 	return d
 
@@ -217,6 +209,15 @@ def get_response_resume(dict):
 		if dict["status_work"] == "Вышел на новое место":
 			URL = URL + "&job_search_status=accepted_job_offer"
 
+	if dict["val"]:
+		if dict["val"] == "RUB":
+			URL = URL + "&currency_code=rub"
+		if dict["val"] == "EUR":
+			URL = URL + "&currency_code=EUR"
+		if dict["val"] == "USD":
+			URL = URL + "&currency_code=USD"
+		
+
 	for pag in range(int(dict['pages'])):
 		URL_main =  URL +"&ored_clusters=true&order_by=relevance&logic=normal&pos=full_text&exp_period=all_time" +"&page="+str(pag) 
 		print(URL_main)
@@ -256,7 +257,7 @@ def get_page_content_resume(content_links,dict):
 					}
 				)
 	for i in content:
-		responce = requests.get(i["link"], proxies=s.proxies, headers=config.HEADERS, timeout=10)
+		responce = requests.get(i["link"], headers=config.HEADERS, timeout=10)
 		soup1 = BeautifulSoup(responce.text, "html.parser")
 		vacancies1 = soup1.find_all("div", attrs={'id':'HH-React-Root'})
 		if len(vacancies1) == 0:
@@ -284,9 +285,15 @@ def get_page_content_resume(content_links,dict):
 				
 				if age:
 					age_text = age.get_text(strip=True)
+					nums = re.findall(r'\d+', age_text)
+					nums = [int(i) for i in nums]
+					age_text = nums
+					age_count = " ".join(str(з) for з in age_text)
+					age_text = age_count.replace('[','').replace(']',' ')		
 				else:
 					age_text = "Нет возраста"
-					
+
+
 				if gender:
 					gender_text = gender.get_text(strip=True)
 				else:
@@ -445,11 +452,23 @@ def make_array_from_list_of_dicts(list_of_dicts):
 
 	
 	
-def main_parse(resume, page, region, salary_before, salary_after, salary_checkbox,relocation, exp,gender,gender_checbox, age_before, age_after,age_checkbox,education,employment,time_work,status_work,dict_table,main_window):
-	dict_1 = init(resume,page,region,salary_before, salary_after, salary_checkbox,relocation,exp,gender,gender_checbox,age_before, age_after,age_checkbox,education,employment,time_work,status_work)
+def main_parse(resume, page, region, salary_before, salary_after, salary_checkbox,relocation, exp,gender,gender_checbox, age_before, age_after,age_checkbox,education,employment,time_work,status_work, val,dict_table,main_window):
+	dict_1 = init(resume,page,region,salary_before, salary_after, salary_checkbox,relocation,exp,gender,gender_checbox,age_before, age_after,age_checkbox,education,employment,time_work,status_work,val)
 	responses = []
 	responses.append(get_response_resume(dict_1))
 	data = []
+	age_20 = 0
+	age_20_30 = 0
+	age_30_40 = 0
+	age_40_50 = 0
+	age_50_60 = 0
+	age_more_60 = 0
+	age_no_age = 0
+
+	exp_no_age = 0
+	exp_1_3=0
+	exp_3_6=0
+	exp_more_6=0
 	if get_page_content_resume(responses[0],dict_1) == None:
 		print("По вашему запросу ничего не найдено!")
 	else:
@@ -464,13 +483,133 @@ def main_parse(resume, page, region, salary_before, salary_after, salary_checkbo
 	dict_table = make_array_from_list_of_dicts(content)
 	main_window['-TABLE-'].update(values=dict_table, visible=True)
 	write_in_file_resume(data,dict_1)
+	#подсчитать проценты тех у кого возраст больше 20 и меньше 30 в dict_1['age']
+	for i in data:
+		try:
+			if int(i['age']) < 20 :
+				age_20 = age_20 +1
+			if int(i['age']) >= 20 and int(i['age']) < 30:
+				age_20_30 = age_20_30 +1
+			if int(i['age']) >= 30 and int(i['age']) < 40:
+				age_30_40 = age_30_40 +1
+			if int(i['age']) >= 40 and int(i['age']) < 50:
+				age_40_50 = age_40_50 +1
+			if int(i['age']) >= 50 and int(i['age']) < 60:
+				age_50_60 = age_50_60 +1
+			if int(i['age']) >= 60:
+				age_more_60 = age_more_60 +1
+		except:
+			age_no_age = age_no_age +1
+			pass
+
+	percent_20 = age_20/len(data) * 100	
+	percent_20_30 = age_20_30 / len(data) * 100
+	percent_30_40 =age_30_40 / len(data) * 100
+	percent_40_50 = age_40_50 / len(data) * 100
+	percent_50_60 = age_50_60 / len(data) * 100
+	percent_60 = age_more_60 / len(data) * 100
+	percent_no_age = age_no_age / len(data) * 100
+
+
+	for i in data:
+		nums = re.findall(r'\d+', i['expirience_count'])
+		nums = [int(b) for b in nums]
+		exp_text = nums
+		exp_count = " ".join(str(з) for з in exp_text)
+		exp_text = exp_count.replace('[','').replace(']',' ')
+		head, sep, tail = exp_text.partition(' ')
+		try:
+			if int(head) >= 1 and  int(head) < 3:
+				exp_1_3 = exp_1_3+1
+			if int(head) >= 3 and  int(head) < 6:
+				exp_3_6 = exp_3_6+1
+			if int(head) >= 6:
+				exp_more_6 = exp_more_6+1
+		except:
+			exp_no_age = exp_no_age+1
+			pass
+
+	percent_exp_1_3 = exp_1_3/len(data) * 100	
+	percent_exp_3_6 = exp_3_6/len(data) * 100	
+	percent_exp_6 = exp_more_6/len(data) * 100	
+	percent_no_exp = exp_no_age / len(data) * 100
+
+
+
+	main_window['-TABLE-'].update(values=dict_table, visible=True)
+
+	main_window['-TEXT_20-'].set_size((int(percent_20),1))
+	main_window['-TEXT_20_proc-'].update(f'{int(percent_20)}%')
+
+	main_window['-TEXT_20_30-'].set_size((int(percent_20_30),1))
+	main_window['-TEXT_20_30_proc-'].update(f'{int(percent_20_30)}%')
+
+	main_window['-TEXT_30_40-'].set_size((int(percent_30_40),1))
+	main_window['-TEXT_30_40_proc-'].update(f'{int(percent_30_40)}%')
+
+	main_window['-TEXT_40_50-'].set_size((int(percent_40_50),1))
+	main_window['-TEXT_40_50_proc-'].update(f'{int(percent_40_50)}%')
+
+	main_window['-TEXT_50_60-'].set_size((int(percent_50_60),1))
+	main_window['-TEXT_50_60_proc-'].update(f'{int(percent_50_60)}%')
+
+	main_window['-TEXT_60-'].set_size((int(percent_60),1))
+	main_window['-TEXT_60_proc-'].update(f'{int(percent_60)}%')
+
+	main_window['-TEXT_no_age-'].set_size((int(percent_no_age),1))
+	main_window['-TEXT_no_age_proc-'].update(f'{int(percent_no_age)}%')
+
 	
+
+
+	main_window['-TEXT_exp_no-'].set_size((int(percent_no_exp),1))
+	main_window['-TEXT_exp_no_proc-'].update(f'{int(percent_no_exp)}%')
+
+	main_window['-TEXT_1_3_exp-'].set_size((int(percent_exp_1_3),1))
+	main_window['-TEXT_1_3_exp_proc-'].update(f'{int(percent_exp_1_3)}%')
+
+	main_window['-TEXT_3_6_exp-'].set_size((int(percent_exp_3_6),1))
+	main_window['-TEXT_3_6_exp_proc-'].update(f'{int(percent_exp_3_6)}%')
+
+	main_window['-TEXT_mpre_6_exp-'].set_size((int(percent_exp_6),1))
+	main_window['-TEXT_more_6_proc-'].update(f'{int(percent_exp_6)}%')
+
+
 def make_window(theme=None):
 	sg.theme(theme)
 	headings = ["Пол","Возраст","Дата рождения", "Город проживания", "Желаемая работа", "Желаемая зарплата", 
 	"Специализация", "График работы", "Занятость", "Подробности образования", "Уровени образования", 
 	"Языки", "Подробности опыта работы", "Опыт работы", "Ссылка"]
 	data_table = []
+	layout_tab1 = [[sg.Table(values=data_table, headings=headings,  visible = True,  vertical_scroll_only = False, max_col_width=40,
+                    auto_size_columns=True,
+		    		right_click_selects=True,
+                    num_rows=50,
+					justification='center', key='-TABLE-',
+					selected_row_colors='red on yellow', 
+					enable_events=True)]]
+	
+	layout_tab_age = [
+			[sg.Text('Возраст',font='Helvetica 18 bold')],
+			[sg.Text('До 20 лет'),sg.VSep(),sg.Text('', size=(0, 1),  background_color='yellow',key='-TEXT_20-'),sg.Text('',key='-TEXT_20_proc-')],
+			[sg.Text('20 - 30 лет'),sg.VSep(),sg.Text('', size=(0, 1),  background_color='yellow',key='-TEXT_20_30-'),sg.Text('',key='-TEXT_20_30_proc-')],
+			[sg.Text('30 - 40 лет'),sg.VSep(),sg.Text('', size=(0, 1),  background_color='yellow',key='-TEXT_30_40-'),sg.Text('',key='-TEXT_30_40_proc-')],
+			[sg.Text('40 - 50 лет'),sg.VSep(),sg.Text('', size=(0, 1),  background_color='yellow',key='-TEXT_40_50-'),sg.Text('',key='-TEXT_40_50_proc-')],
+			[sg.Text('50 - 60 лет'),sg.VSep(),sg.Text('', size=(0, 1),  background_color='yellow',key='-TEXT_50_60-'),sg.Text('',key='-TEXT_50_60_proc-')],
+			[sg.Text('От 60 лет'),sg.VSep(),sg.Text('', size=(0, 1),  background_color='yellow',key='-TEXT_60-'),sg.Text('',key='-TEXT_60_proc-')],
+			[sg.Text('Не указан '),sg.VSep(),sg.Text('', size=(0, 1),  background_color='yellow',key='-TEXT_no_age-'),sg.Text('',key='-TEXT_no_age_proc-')]]
+	
+	layout_tab_exp = [
+			[sg.Text('Опыт работы',font='Helvetica 18 bold')],
+			[sg.Text('Нет опыта'),sg.VSep(),sg.Text('', size=(0, 1),  background_color='yellow',key='-TEXT_exp_no-'),sg.Text('',key='-TEXT_exp_no_proc-')],
+			[sg.Text('От 1 до 3 лет'),sg.VSep(),sg.Text('', size=(0, 1),  background_color='yellow',key='-TEXT_1_3_exp-'),sg.Text('',key='-TEXT_1_3_exp_proc-')],
+			[sg.Text('От 3 до 6 лет '),sg.VSep(),sg.Text('', size=(0, 1),  background_color='yellow',key='-TEXT_3_6_exp-'),sg.Text('',key='-TEXT_3_6_exp_proc-')],
+			[sg.Text('Более 6 лет'),sg.VSep(),sg.Text('', size=(0, 1),  background_color='yellow',key='-TEXT_mpre_6_exp-'),sg.Text('',key='-TEXT_more_6_proc-')],
+	]
+	tab_group = sg.TabGroup([[sg.Tab('Возраст', layout_tab_age)],[sg.Tab('Опыт работы', layout_tab_exp)]])
+	
+
+	tab6_layout = [[tab_group]]
 	layout = [ 
 			[sg.Button('Старт', button_color=('black','white'), key='Play'),sg.Button('Выход', button_color=('black','white'), key='-Stop-'),sg.Text('                                                                                                                                                                                   Тема:',justification='center'),sg.Combo(sg.theme_list(), default_value=sg.theme(), s=(15,22), enable_events=True, readonly=True, k='-Theme-')],
 			[sg.HSep()],
@@ -482,14 +621,9 @@ def make_window(theme=None):
 			[sg.VSep(),sg.Text('Указан доход:'),sg.Checkbox('', default=False, key='-Checkbox-'),sg.Text('Указан возраст:'),sg.Checkbox('', default=False, key='-Checkbox_age-'),sg.Text('Указан пол:'),sg.Checkbox('', default=False, key='-Checkbox_gender-'),
 				sg.Text('Пол:'),sg.Combo(values=('Мужской', 'Женский', 'Не имеет значения'), readonly=True, key='-COMBO_gender-',expand_x=True),
     			sg.Text('Статус поиска:'),sg.Combo(values=('Без статуса поиска','Не ищет работу', 'Рассматривает предложения', 'Активно ищет работу', 'Предложили работу, решает','Вышел на новое место'), readonly=True, key='-COMBO_status_work-'),sg.VSep()],
+			[sg.VSep(),sg.Text('Валюта:'),sg.Combo(values=('RUB','EUR', 'USD'), readonly=True, key='-COMBO_valuta-',expand_x=True),sg.VSep()],
 			[sg.HSep()],
-			[sg.Table(values=data_table, headings=headings,  visible = False,  vertical_scroll_only = False, max_col_width=40,
-                    auto_size_columns=True,
-		    		right_click_selects=True,
-                    num_rows=20,
-					justification='center', key='-TABLE-',
-					selected_row_colors='red on yellow', 
-					enable_events=True)],	
+			[sg.TabGroup([[sg.Tab('Таблица', layout_tab1), sg.Tab('Статистика', tab6_layout)]])],
 			]
 	window = sg.Window('Резюме HH.RU', layout,size=(1000, 600))	
 	return window
@@ -509,8 +643,8 @@ def parse():
 			th = Thread(target=main_parse, args=(values['-VAC-'], values['-PAGE-'],values['-Region-'],values['-Salary_before-'],values['-Salary_after-'],
 					values['-Checkbox-'],values['-COMBO_relocation-'],values['-COMBO_Exp-'],values['-COMBO_gender-'],values['-Checkbox_gender-'],
 					values['-Age_before-'],values['-Age_after-'],values['-Checkbox_age-'],values['-COMBO_education-'],values['-COMBO_employment-'],
-					values['-COMBO_time_work-'],values['-COMBO_status_work-'], data_table,window))
-			th.start()						
+					values['-COMBO_time_work-'],values['-COMBO_status_work-'], values['-COMBO_valuta-'], data_table,window))
+			th.start()							
 	window.close()
 		
 
