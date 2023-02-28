@@ -9,7 +9,14 @@ import PySimpleGUI as sg
 import time
 from threading import Thread
 import re
-
+import statistics
+import string
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib
+matplotlib.use('Agg')
+import pylab
 
         
 proxies = {
@@ -45,7 +52,7 @@ def translite_region(name):
 
 area = config.HEADHUNTER_AREA_PARAM
 
-def init(name, page, salary, checkbox,region,education, exp,employment,work_time):
+def init(name, page, salary, checkbox,region,education, exp,employment,work_time,val):
 	region_text = translite_region(region)
 	text_work = name
 	text_work_rus=text_work
@@ -62,7 +69,8 @@ def init(name, page, salary, checkbox,region,education, exp,employment,work_time
 		"education" : education,
 		"exp": exp,
 		"employment" : employment,
-		"work_time" : work_time
+		"work_time" : work_time,
+		"val" : val
 	}
 	return d
 		
@@ -123,6 +131,13 @@ def get_response(dict):
 			URL = URL + "&schedule=remote"
 		if dict["work_time"] == "Вахтовый метод":
 			URL = URL + "&schedule=flyInFlyOut"
+	if dict["val"]:
+		if dict["val"] == "RUB":
+			URL = URL + "&currency_code=rub"
+		if dict["val"] == "EUR":
+			URL = URL + "&currency_code=EUR"
+		if dict["val"] == "USD":
+			URL = URL + "&currency_code=USD"
 	for pag in range(int(dict['pages'])):
 		URL_main =  URL +"&page="+str(pag)+"&hhtmFrom=vacancy_search_list"
 		print(URL_main)
@@ -183,10 +198,21 @@ def get_page_content(content_links,dict):
 					company_name_text = company_name.get_text(strip=True)	
 				else:
 					company_name_text = "Компания не указана"
+
+
+				city = result.find('span',attrs={'data-qa': 'vacancy-view-raw-address'})	
+				if city:
+					city_text = city.get_text(strip=True)
+					head, sep, tail = city_text.partition(',')
+					city_text = head
+				else:
+					city_text = "Город не указан"	
 					
 				address = result.find('span',attrs={'data-qa': 'vacancy-view-raw-address'})	
 				if address:
 					address_text = address.get_text(strip=True)
+					head, sep, tail = address_text.partition(',')
+					address_text = tail
 				else:
 					address_text = "Адрес не указан"
 
@@ -226,6 +252,7 @@ def get_page_content(content_links,dict):
 						"cash": cash_text,
 						"experience_count": experience_count_text,
 						"description": description_text,
+						"city": city_text,
 						"address" : address_text,
 						"employment" : employment_text,
 						"skills" : result,
@@ -240,10 +267,10 @@ def write_in_file(data,dict):
 		with open(f"{dict['text_work_rus'].title()}.{config.SAVE_FILE_EXTENSION}", "w", newline="",errors='ignore') as file:
 			writer = csv.writer(file, delimiter=";")
 
-			writer.writerow(["Должность", "Компания","Зарплата", "Опыт работы", "Описание","Адрес", "Тип занятости", "Ключевые навыки", "Ссылка"])
+			writer.writerow(["Должность", "Компания","Зарплата", "Опыт работы", "Описание","Город", "Адрес", "Тип занятости", "Ключевые навыки", "Ссылка"])
 
 			for dataset in data:
-				writer.writerow([dataset["name"], dataset["company_name"] ,dataset["cash"],dataset["experience_count"], dataset["description"], dataset["address"], dataset["employment"],dataset["skills"], dataset["link"]])
+				writer.writerow([dataset["name"], dataset["company_name"] ,dataset["cash"],dataset["experience_count"], dataset["description"], dataset["city"], dataset["address"], dataset["employment"],dataset["skills"], dataset["link"]])
 
 		print(f"{'Файл Вакансии -'+dict['text_work_rus'].title()}.{config.SAVE_FILE_EXTENSION} сохранён на рабочий стол!")
 	except Exception as exc:
@@ -254,8 +281,14 @@ def write_in_file(data,dict):
 def make_array_from_list_of_dicts(list_of_dicts):
     return [[i for i in j.values()] for j in list_of_dicts]
 
-def main_parse(resume, page, salary,checkbox,  region, education, exp, employment, work_time, dict_table,main_window):
-	dict_1 = init(resume,page,salary,checkbox,region, education, exp,employment,work_time)
+def draw_figure(canvas, figure, loc=(0, 0)):
+    figure_canvas_agg = FigureCanvasTkAgg(figure, canvas)
+    figure_canvas_agg.draw()
+    figure_canvas_agg.get_tk_widget().pack(side='top', fill='both', expand=1)
+    return figure_canvas_agg
+
+def main_parse(resume, page, salary,checkbox,  region, education, exp, employment, work_time, val, dict_table,main_window):
+	dict_1 = init(resume,page,salary,checkbox,region, education, exp,employment,work_time,val)
 	responses = []
 	responses.append(get_response(dict_1))
 	data = []
@@ -269,16 +302,765 @@ def main_parse(resume, page, salary,checkbox,  region, education, exp, employmen
 					data.append(dataset)	
 			else:
 				break
+
+	exp_no_age = 0
+	exp_1_3=0
+	exp_3_6=0
+	exp_more_6=0			
+	for i in data:
+		if i['experience_count'] == "1–3 года":
+			exp_1_3 = exp_1_3+1
+		if i['experience_count'] == "3–6 лет":
+			exp_3_6 = exp_3_6+1
+		if i['experience_count'] == "более 6 лет":
+			exp_more_6 = exp_more_6+1
+		if i['experience_count'] == "не требуется":
+			exp_no_age = exp_no_age+1
+		
+			
+
 	
+	
+	labels = 'Нет опыта работы', '1 - 3 год', '3 - 6 год', 'Более 6 лет'
+	sizes = [exp_no_age, exp_1_3, exp_3_6, exp_more_6]
+	explode = (0.2, 0.2, 0.2, 0.2)
+	fig1 = plt.figure(figsize=(15, 10))
+	plt.title('Требуемый опыт работы (%)')
+	plt.pie(sizes, autopct='%1.1f%%', shadow=True, explode=explode, wedgeprops={'lw':1, 'ls':'--','edgecolor':"k"})
+	plt.legend(bbox_to_anchor = (0.15, 1.1),labels = labels)
+	draw_figure(main_window['-CANVAS_circle-'].TKCanvas, fig1)
+	plt.close()
+	
+	data_cash=[]
+	data_cash_With_exp_more_6=[]
+	data_cash_With_exp_1_3=[]
+	data_cash_With_exp_3_6=[]
+
+	for i in data:
+		if i['cash'].find("руб")!= -1:
+			int_rub_text=i['cash'].replace('\xa0','')
+			head, sep, tail = int_rub_text.partition('руб')
+			if head.find("от")!= -1:
+				prom = head.replace('от','')
+				if prom.find("до")!= -1:
+					head, sep, tail = prom.partition('до')
+					data_cash.append(int(head))
+					continue
+				else:
+					data_cash.append(int(prom))
+					continue
+			if head.find("до")!= -1:
+				prom = head.replace('до','')
+				if prom.find("от")!= -1:
+					head, sep, tail = prom.partition('от')
+					data_cash.append(int(head))
+					continue
+				else:
+					data_cash.append(int(prom))
+					continue
+		if i['cash'].find("USD")!= -1:
+			int_usd_text=i['cash'].replace('\xa0','')
+			head, sep, tail = int_usd_text.partition('USD')
+			if head.find("от")!= -1:
+				prom = head.replace('от','')
+				if prom.find("до")!= -1:
+					head, sep, tail = prom.partition('до')
+					head = int(head) * 75.05
+					data_cash.append(int(head))
+					continue
+				else:
+					prom = int(prom) * 75.05
+					data_cash.append(int(prom))
+					continue	
+			if head.find("до")!= -1:
+				prom = head.replace('до','')
+				if prom.find("от")!= -1:
+					head, sep, tail = prom.partition('от')
+					head = int(head) * 75.05
+					data_cash.append(int(head))
+					continue
+				else:
+					prom = int(prom) * 75.05
+					data_cash.append(int(prom))
+					continue
+		if i['cash'].find("KZT")!= -1:
+			int_kzt_text=i['cash'].replace('\xa0','')
+			head, sep, tail = int_kzt_text.partition('KZT')
+			if head.find("от")!= -1:
+				prom = head.replace('от','')
+				if prom.find("до")!= -1:
+					head, sep, tail = prom.partition('до')
+					head = int(head) * 0.17
+					data_cash.append(int(head))
+					continue
+				else:
+					prom = int(prom) * 0.17
+					data_cash.append(int(prom))
+					continue
+			if head.find("до")!= -1:
+				prom = head.replace('до','')
+				if prom.find("от")!= -1:
+					head, sep, tail = prom.partition('от')
+					head = int(head) * 0.17							
+					data_cash.append(int(head))
+					continue
+				else:
+					prom = int(prom) * 0.17				
+					data_cash.append(int(prom))
+					continue
+		if i['cash'].find("EUR")!= -1:
+			int_kzt_text=i['cash'].replace('\xa0','')
+			head, sep, tail = int_kzt_text.partition('EUR')
+			if head.find("от")!= -1:
+				prom = head.replace('от','')
+				if prom.find("до")!= -1:
+					head, sep, tail = prom.partition('до')
+					head = int(head) * 80.37
+					data_cash.append(int(head))
+					continue
+				else:
+					prom = int(prom) * 80.37
+					data_cash.append(int(prom))
+					continue
+			if head.find("до")!= -1:
+				prom = head.replace('до','')
+				if prom.find("от")!= -1:
+					head, sep, tail = prom.partition('от')
+					head = int(head) * 80.37
+					data_cash.append(int(head))
+					continue
+				else:
+					prom = int(prom) * 80.37
+					data_cash.append(int(prom))
+					continue
+	data_cash = sorted(data_cash)
+	median = statistics.median(data_cash)
+	avg_cash = sum(data_cash)/len(data_cash)				
+	for i in data:				
+		if i['experience_count'] == "1–3 года":
+			if i['cash'].find("руб")!= -1:
+				int_rub_text=i['cash'].replace('\xa0','')
+				head, sep, tail = int_rub_text.partition('руб')
+				if head.find("от")!= -1:
+					prom = head.replace('от','')
+					if prom.find("до")!= -1:
+						head, sep, tail = prom.partition('до')
+						data_cash_With_exp_1_3.append(int(head))
+						continue
+					else:
+						data_cash_With_exp_1_3.append(int(prom))
+						continue
+				
+				if head.find("до")!= -1:
+					prom = head.replace('до','')
+					if prom.find("от")!= -1:
+						head, sep, tail = prom.partition('от')
+						data_cash_With_exp_1_3.append(int(head))
+						continue
+					else:
+						data_cash_With_exp_1_3.append(int(prom))
+						continue
+				
+			if i['cash'].find("USD")!= -1:
+				int_usd_text=i['cash'].replace('\xa0','')
+				head, sep, tail = int_usd_text.partition('USD')
+				if head.find("от")!= -1:
+					prom = head.replace('от','')
+					if prom.find("до")!= -1:
+						head, sep, tail = prom.partition('до')
+						head = int(head) * 75.05
+						data_cash_With_exp_1_3.append(int(head))
+						continue
+					else:
+						prom = int(prom) * 75.05
+						data_cash_With_exp_1_3.append(int(prom))
+						continue
+				
+				if head.find("до")!= -1:
+					prom = head.replace('до','')
+					if prom.find("от")!= -1:
+						head, sep, tail = prom.partition('от')
+						head = int(head) * 75.05
+						data_cash_With_exp_1_3.append(int(head))
+						continue
+					else:
+						prom = int(prom) * 75.05
+						data_cash_With_exp_1_3.append(int(prom))
+						continue
+				
+			if i['cash'].find("KZT")!= -1:
+				int_kzt_text=i['cash'].replace('\xa0','')
+				head, sep, tail = int_kzt_text.partition('KZT')
+				if head.find("от")!= -1:
+					prom = head.replace('от','')
+					if prom.find("до")!= -1:
+						head, sep, tail = prom.partition('до')
+						head = int(head) * 0.17
+						data_cash_With_exp_1_3.append(int(head))
+						continue
+					else:
+						prom = int(prom) * 0.17
+						data_cash_With_exp_1_3.append(int(prom))
+						continue
+				
+				if head.find("до")!= -1:
+					prom = head.replace('до','')
+					if prom.find("от")!= -1:
+						head, sep, tail = prom.partition('от')
+						head = int(head) * 0.17							
+						data_cash_With_exp_1_3.append(int(head))
+						continue
+					else:
+						prom = int(prom) * 0.17				
+						data_cash_With_exp_1_3.append(int(prom))
+						continue
+				
+			if i['cash'].find("EUR")!= -1:
+				int_kzt_text=i['cash'].replace('\xa0','')
+				head, sep, tail = int_kzt_text.partition('EUR')
+				if head.find("от")!= -1:
+					prom = head.replace('от','')
+					if prom.find("до")!= -1:
+						head, sep, tail = prom.partition('до')
+						head = int(head) * 80.37
+						data_cash_With_exp_1_3.append(int(head))
+						continue
+					else:
+						prom = int(prom) * 80.37
+						data_cash_With_exp_1_3.append(int(prom))
+						continue
+				
+				if head.find("до")!= -1:
+					prom = head.replace('до','')
+					if prom.find("от")!= -1:
+						head, sep, tail = prom.partition('от')
+						head = int(head) * 80.37
+						data_cash_With_exp_1_3.append(int(head))
+						continue
+					else:
+						prom = int(prom) * 80.37
+						data_cash_With_exp_1_3.append(int(prom))
+						continue
+		if i['experience_count'] == "3–6 лет":
+			if i['cash'].find("руб")!= -1:
+				int_rub_text=i['cash'].replace('\xa0','')
+				head, sep, tail = int_rub_text.partition('руб')
+				if head.find("от")!= -1:
+					prom = head.replace('от','')
+					if prom.find("до")!= -1:
+						head, sep, tail = prom.partition('до')
+						data_cash_With_exp_3_6.append(int(head))
+						continue
+					else:
+						data_cash_With_exp_3_6.append(int(prom))
+						continue
+				
+				if head.find("до")!= -1:
+					prom = head.replace('до','')
+					if prom.find("от")!= -1:
+						head, sep, tail = prom.partition('от')
+						data_cash_With_exp_3_6.append(int(head))
+						continue
+					else:
+						data_cash_With_exp_3_6.append(int(prom))
+						continue
+					
+			if i['cash'].find("USD")!= -1:
+				int_usd_text=i['cash'].replace('\xa0','')
+				head, sep, tail = int_usd_text.partition('USD')
+				if head.find("от")!= -1:
+					prom = head.replace('от','')
+					if prom.find("до")!= -1:
+						head, sep, tail = prom.partition('до')
+						head = int(head) * 75.05
+						data_cash_With_exp_3_6.append(int(head))
+						continue
+					else:
+						prom = int(prom) * 75.05
+						data_cash_With_exp_3_6.append(int(prom))
+						continue
+				
+				if head.find("до")!= -1:
+					prom = head.replace('до','')
+					if prom.find("от")!= -1:
+						head, sep, tail = prom.partition('от')
+						head = int(head) * 75.05
+						data_cash_With_exp_3_6.append(int(head))
+						continue
+					else:
+						prom = int(prom) * 75.05
+						data_cash_With_exp_3_6.append(int(prom))
+						continue
+						
+			if i['cash'].find("KZT")!= -1:
+				int_kzt_text=i['cash'].replace('\xa0','')
+				head, sep, tail = int_kzt_text.partition('KZT')
+				if head.find("от")!= -1:
+					prom = head.replace('от','')
+					if prom.find("до")!= -1:
+						head, sep, tail = prom.partition('до')
+						head = int(head) * 0.17
+						data_cash_With_exp_3_6.append(int(head))
+						continue
+					else:
+						prom = int(prom) * 0.17
+						data_cash_With_exp_3_6.append(int(prom))
+						continue
+				
+				if head.find("до")!= -1:
+					prom = head.replace('до','')
+					if prom.find("от")!= -1:
+						head, sep, tail = prom.partition('от')
+						head = int(head) * 0.17							
+						data_cash_With_exp_3_6.append(int(head))
+						continue
+					else:
+						prom = int(prom) * 0.17				
+						data_cash_With_exp_3_6.append(int(prom))
+						continue
+					
+			if i['cash'].find("EUR")!= -1:
+				int_kzt_text=i['cash'].replace('\xa0','')
+				head, sep, tail = int_kzt_text.partition('EUR')
+				if head.find("от")!= -1:
+					prom = head.replace('от','')
+					if prom.find("до")!= -1:
+						head, sep, tail = prom.partition('до')
+						head = int(head) * 80.37
+						data_cash_With_exp_3_6.append(int(head))
+						continue
+						
+					else:
+						prom = int(prom) * 80.37
+						print(prom)
+						data_cash_With_exp_3_6.append(int(prom))
+						continue
+				
+				if head.find("до")!= -1:
+					prom = head.replace('до','')
+					if prom.find("от")!= -1:
+						head, sep, tail = prom.partition('от')
+						head = int(head) * 80.37
+						data_cash_With_exp_3_6.append(int(head))
+						continue
+					else:
+						prom = int(prom) * 80.37
+						data_cash_With_exp_3_6.append(int(prom))	
+						continue		
+		if i['experience_count'] == "более 6 лет":
+			if i['cash'].find("руб")!= -1:
+				int_rub_text=i['cash'].replace('\xa0','')
+				head, sep, tail = int_rub_text.partition('руб')
+				if head.find("от")!= -1:
+					prom = head.replace('от','')
+					if prom.find("до")!= -1:
+						head, sep, tail = prom.partition('до')
+						data_cash_With_exp_more_6.append(int(head))
+						continue
+					else:
+						data_cash_With_exp_more_6.append(int(prom))
+						continue
+				
+				if head.find("до")!= -1:
+					prom = head.replace('до','')
+					if prom.find("от")!= -1:
+						head, sep, tail = prom.partition('от')
+						data_cash_With_exp_more_6.append(int(head))
+						continue
+					else:
+						data_cash_With_exp_more_6.append(int(prom))
+						continue
+				
+			if i['cash'].find("USD")!= -1:
+				int_usd_text=i['cash'].replace('\xa0','')
+				head, sep, tail = int_usd_text.partition('USD')
+				if head.find("от")!= -1:
+					prom = head.replace('от','')
+					if prom.find("до")!= -1:
+						head, sep, tail = prom.partition('до')
+						head = int(head) * 75.05
+						data_cash_With_exp_more_6.append(int(head))
+						continue
+					else:
+						prom = int(prom) * 75.05
+						data_cash_With_exp_more_6.append(int(prom))
+						continue
+				
+				if head.find("до")!= -1:
+					prom = head.replace('до','')
+					if prom.find("от")!= -1:
+						head, sep, tail = prom.partition('от')
+						head = int(head) * 75.05
+						data_cash_With_exp_more_6.append(int(head))
+						continue
+					else:
+						prom = int(prom) * 75.05
+						data_cash_With_exp_more_6.append(int(prom))
+						continue
+				
+			if i['cash'].find("KZT")!= -1:
+				int_kzt_text=i['cash'].replace('\xa0','')
+				head, sep, tail = int_kzt_text.partition('KZT')
+				if head.find("от")!= -1:
+					prom = head.replace('от','')
+					if prom.find("до")!= -1:
+						head, sep, tail = prom.partition('до')
+						head = int(head) * 0.17
+						data_cash_With_exp_more_6.append(int(head))
+						continue
+					else:
+						prom = int(prom) * 0.17
+						data_cash_With_exp_more_6.append(int(prom))
+						continue
+				
+				if head.find("до")!= -1:
+					prom = head.replace('до','')
+					if prom.find("от")!= -1:
+						head, sep, tail = prom.partition('от')
+						head = int(head) * 0.17							
+						data_cash_With_exp_more_6.append(int(head))
+						continue
+					else:
+						prom = int(prom) * 0.17				
+						data_cash_With_exp_more_6.append(int(prom))
+						continue
+				
+			if i['cash'].find("EUR")!= -1:
+				int_kzt_text=i['cash'].replace('\xa0','')
+				head, sep, tail = int_kzt_text.partition('EUR')
+				if head.find("от")!= -1:
+					prom = head.replace('от','')
+					if prom.find("до")!= -1:
+						head, sep, tail = prom.partition('до')
+						head = int(head) * 80.37
+						data_cash_With_exp_more_6.append(int(head))
+						continue
+					else:
+						prom = int(prom) * 80.37
+						print(prom)
+						data_cash_With_exp_more_6.append(int(prom))
+						continue
+				
+				if head.find("до")!= -1:
+					prom = head.replace('до','')
+					if prom.find("от")!= -1:
+						head, sep, tail = prom.partition('от')
+						head = int(head) * 80.37
+						data_cash_With_exp_more_6.append(int(head))
+						continue
+					else:
+						prom = int(prom) * 80.37
+						data_cash_With_exp_more_6.append(int(prom))
+						continue
+
+				
+									
+						
+		
+	try:
+		avg_more_6_cash = sum(data_cash_With_exp_more_6)/len(data_cash_With_exp_more_6)
+	except ZeroDivisionError:
+		avg_more_6_cash = 0
+	try:
+		avg_1_3_cash = sum(data_cash_With_exp_1_3)/len(data_cash_With_exp_1_3)
+	except ZeroDivisionError:
+		avg_1_3_cash = 0
+	try:
+		avg_3_6_cash = sum(data_cash_With_exp_3_6)/len(data_cash_With_exp_3_6)
+	except ZeroDivisionError:
+		avg_3_6_cash = 0
+
+
+	data_exp = {
+		"1 - 3 года" : int(avg_1_3_cash),
+		"3 - 6 лет" : int(avg_3_6_cash),
+		"Более 6 лет" : int(avg_more_6_cash)
+	}
+	plt.figure(figsize=(5.5, 5))
+	courses = list(data_exp.keys())
+	values = list(data_exp.values())
+	barlot = plt.bar(courses, values, color ='blue', width = 0.3)
+	plt.bar_label(barlot,labels=values,label_type='edge')
+	plt.title("Средняя зарплата к опыту работы")	
+	fig = plt.gcf()    
+	draw_figure(main_window['-CANVAS-'].TKCanvas, fig)
+	figure_x, figure_y, figure_w, figure_h = fig.bbox.bounds
+	plt.close()
+
+	cash_msk = []
+	cash_spb = []
+	cash_kazan = []
+	cash_ekb = []
+	cash_region = []
+
+	for i in data:
+		try:
+			if i['city'] == "Москва":
+				if i['cash'].find("руб")!= -1:
+					int_rub_text=i['cash'].replace('\xa0','')
+					head, sep, tail = int_rub_text.partition('руб')
+					if head.find("от")!= -1:
+						prom = head.replace('от','')
+						if prom.find("до")!= -1:
+							head, sep, tail = prom.partition('до')
+							cash_msk.append(int(head))
+							continue
+						else:
+							cash_msk.append(int(prom))
+							continue
+					if head.find("до")!= -1:
+						prom = head.replace('до','')
+						if prom.find("от")!= -1:
+							head, sep, tail = prom.partition('от')
+							cash_msk.append(int(head))
+							continue
+						else:
+							cash_msk.append(int(prom))
+							continue
+			if i['city'] == "Санкт-Петербург":
+				if i['cash'].find("руб")!= -1:
+					int_rub_text=i['cash'].replace('\xa0','')
+					head, sep, tail = int_rub_text.partition('руб')
+					if head.find("от")!= -1:
+						prom = head.replace('от','')
+						if prom.find("до")!= -1:
+							head, sep, tail = prom.partition('до')
+							cash_spb.append(int(head))
+							continue
+						else:
+							cash_spb.append(int(prom))
+							continue
+					if head.find("до")!= -1:
+						prom = head.replace('до','')
+						if prom.find("от")!= -1:
+							head, sep, tail = prom.partition('от')
+							cash_spb.append(int(head))
+							continue
+						else:
+							cash_spb.append(int(prom))
+							continue
+			if i['city'] == "Казань":
+				if i['cash'].find("руб")!= -1:
+					int_rub_text=i['cash'].replace('\xa0','')
+					head, sep, tail = int_rub_text.partition('руб')
+					if head.find("от")!= -1:
+						prom = head.replace('от','')
+						if prom.find("до")!= -1:
+							head, sep, tail = prom.partition('до')
+							cash_kazan.append(int(head))
+							continue
+						else:
+							cash_kazan.append(int(prom))
+							continue
+					if head.find("до")!= -1:
+						prom = head.replace('до','')
+						if prom.find("от")!= -1:
+							head, sep, tail = prom.partition('от')
+							cash_kazan.append(int(head))
+							continue
+						else:
+							cash_kazan.append(int(prom))
+							continue
+			if i['city'] == "Екатеринбург":
+				if i['cash'].find("руб")!= -1:
+					int_rub_text=i['cash'].replace('\xa0','')
+					head, sep, tail = int_rub_text.partition('руб')
+					if head.find("от")!= -1:
+						prom = head.replace('от','')
+						if prom.find("до")!= -1:
+							head, sep, tail = prom.partition('до')
+							cash_ekb.append(int(head))
+							continue
+						else:
+							cash_ekb.append(int(prom))
+							continue
+					if head.find("до")!= -1:
+						prom = head.replace('до','')
+						if prom.find("от")!= -1:
+							head, sep, tail = prom.partition('от')
+							cash_ekb.append(int(head))
+							continue
+						else:
+							cash_ekb.append(int(prom))
+							continue
+			if i['city'] != "Санкт-Петербург" and i['city'] != "Москва"and i['city'] != "Казань" and i['city'] != "Екатеринбург":
+				if i['cash'].find("руб")!= -1:
+					int_rub_text=i['cash'].replace('\xa0','')
+					head, sep, tail = int_rub_text.partition('руб')
+					if head.find("от")!= -1:
+						prom = head.replace('от','')
+						if prom.find("до")!= -1:
+							head, sep, tail = prom.partition('до')
+							cash_region.append(int(head))
+							continue
+						else:
+							cash_region.append(int(prom))
+							continue
+					if head.find("до")!= -1:
+						prom = head.replace('до','')
+						if prom.find("от")!= -1:
+							head, sep, tail = prom.partition('от')
+							cash_region.append(int(head))
+							continue
+						else:
+							cash_region.append(int(prom))
+							continue
+				if i['cash'].find("USD")!= -1:
+					int_usd_text=i['cash'].replace('\xa0','')
+					head, sep, tail = int_usd_text.partition('USD')
+					if head.find("от")!= -1:
+						prom = head.replace('от','')
+						if prom.find("до")!= -1:
+							head, sep, tail = prom.partition('до')
+							head = int(head) * 75.05
+							cash_region.append(int(head))
+							continue
+						else:
+							prom = int(prom) * 75.05
+							cash_region.append(int(prom))
+							continue				
+					if head.find("до")!= -1:
+						prom = head.replace('до','')
+						if prom.find("от")!= -1:
+							head, sep, tail = prom.partition('от')
+							head = int(head) * 75.05
+							cash_region.append(int(head))
+							continue
+						else:
+							prom = int(prom) * 75.05
+							cash_region.append(int(prom))
+							continue					
+				if i['cash'].find("KZT")!= -1:
+					int_kzt_text=i['cash'].replace('\xa0','')
+					head, sep, tail = int_kzt_text.partition('KZT')
+					if head.find("от")!= -1:
+						prom = head.replace('от','')
+						if prom.find("до")!= -1:
+							head, sep, tail = prom.partition('до')
+							head = int(head) * 0.17
+							cash_region.append(int(head))
+							continue
+						else:
+							prom = int(prom) * 0.17
+							cash_region.append(int(prom))
+							continue					
+					if head.find("до")!= -1:
+						prom = head.replace('до','')
+						if prom.find("от")!= -1:
+							head, sep, tail = prom.partition('от')
+							head = int(head) * 0.17							
+							cash_region.append(int(head))
+							continue
+						else:
+							prom = int(prom) * 0.17				
+							cash_region.append(int(prom))
+							continue					
+				if i['cash'].find("EUR")!= -1:
+					int_kzt_text=i['cash'].replace('\xa0','')
+					head, sep, tail = int_kzt_text.partition('EUR')
+					if head.find("от")!= -1:
+						prom = head.replace('от','')
+						if prom.find("до")!= -1:
+							head, sep, tail = prom.partition('до')
+							head = int(head) * 80.37
+							cash_region.append(int(head))
+							continue
+						else:
+							prom = int(prom) * 80.37
+							print(prom)
+							cash_region.append(int(prom))
+							continue
+					if head.find("до")!= -1:
+						prom = head.replace('до','')
+						if prom.find("от")!= -1:
+							head, sep, tail = prom.partition('от')
+							head = int(head) * 80.37
+							cash_region.append(int(head))
+							continue
+						else:
+							prom = int(prom) * 80.37
+							cash_region.append(int(prom))
+							continue
+		except:
+			pass
+			
+	
+	try:
+		avg_msk = sum(cash_msk)/len(cash_msk)
+	except ZeroDivisionError:
+		avg_msk = 0
+	try:
+		avg_spb = sum(cash_spb)/len(cash_spb)
+	except ZeroDivisionError:
+		avg_spb = 0
+	try:
+		avg_kazan = sum(cash_kazan)/len(cash_kazan)
+	except ZeroDivisionError:
+		avg_kazan = 0
+	try:
+		avg_ekb = sum(cash_ekb)/len(cash_ekb)
+	except ZeroDivisionError:
+		avg_ekb = 0
+	try:
+		avg_region = sum(cash_region)/len(cash_region)
+	except ZeroDivisionError:
+		avg_region = 0
+	
+
+	data_exp2 = {
+		"Москва" : int(avg_msk),
+		"Санкт-Петербург" : int(avg_spb),
+		"Казань" : int(avg_kazan),
+		"Екатеринбург" : int(avg_ekb),
+		"Регионы" : int(avg_region)
+	}
+
+
+	plt.figure(figsize=(6, 5))
+	courses_region = list(data_exp2.keys())
+	values_region = list(data_exp2.values())
+	barlot2 = plt.bar(courses_region, values_region, color ='blue', width = 0.3)
+	plt.bar_label(barlot2,labels=values_region,label_type='edge')
+	plt.title("Средняя зарплата по главным регионам")	
+	fig2 = plt.gcf()    
+	draw_figure(main_window['-CANVAS2-'].TKCanvas, fig2)
+	figure_x, figure_y, figure_w, figure_h = fig.bbox.bounds
+	plt.close()
+
+
 	dict_table = make_array_from_list_of_dicts(content)
 	main_window['-TABLE-'].update(values=dict_table, visible=True)
+	main_window['-TEXT_diap-'].update(f'{int(data_cash[0])} - {int(data_cash[-1])} руб.')
+	main_window['-TEXT_median-'].update(f'{int(median)} руб.')
+	main_window['-TEXT_avg-'].update(f'{int(avg_cash)} руб.')
 	write_in_file(data,dict_1)
 
 def make_window(theme=None):
 	sg.theme(theme)
-	headings = ["Должность", "Компания", "Зарплата", "Опыт работы", "Описание","Адрес", "Тип занятости", "Ключевые навыки", "Ссылка"]
+	headings = ["Должность", "Компания", "Зарплата", "Опыт работы", "Описание", "Город","Адрес", "Тип занятости", "Ключевые навыки", "Ссылка"]
 	data_table = []
 	#menu_def=['&File', ['&New File', '&Open...','Open &Module','---', '!&Recent Files','C&lose']],['&Save',['&Save File', 'Save &As','Save &Copy'  ]],['&Edit', ['&Cut', '&Copy', '&Paste']]
+	layout_tab1 = [[sg.Table(values=data_table, headings=headings,  visible = True,  vertical_scroll_only = False, max_col_width=50,
+                    auto_size_columns=True,
+		    		right_click_selects=True,
+                    num_rows=20,
+		    		expand_x = True,
+					justification='center', key='-TABLE-',
+					selected_row_colors='red on yellow', 
+					enable_events=True)]]
+	layout_tab_exp = [
+			[sg.Text('Опыт работы',font='Helvetica 18 bold')],
+			[sg.Canvas(key='-CANVAS_circle-')],
+	]
+
+	layout_tab_cash = [[sg.Text('Анализ заработной платы										',font='Helvetica 18 bold')],
+		    [sg.Text('Диапозон: '),sg.Text('',key='-TEXT_diap-')],
+		    [sg.Text('Медиана зарплаты: '),sg.Text('',key='-TEXT_median-')],
+		    [sg.Text('Средняя зарплата: '),sg.Text('',key='-TEXT_avg-')],
+		    [sg.Canvas(key='-CANVAS-'),sg.Canvas(key='-CANVAS2-')]
+		    ]
+	tab_group = sg.TabGroup([[sg.Tab('Опыт работы', layout_tab_exp)],[sg.Tab('Анализ заработной платы', layout_tab_cash)]],border_width = 3)
+	tab6_layout = [[tab_group]]
 	layout = [ 
 			#[sg.Menu(menu_def, key='-MENU-')],
 			[sg.Button('Старт', button_color=('black','white'), key='Play'),sg.Button('Выход', button_color=('black','white'), key='-Stop-'), sg.Text('                                                                                                                                                                                   Тема:',justification='center'),sg.Combo(sg.theme_list(), default_value=sg.theme(), s=(15,22), enable_events=True, readonly=True, k='-Theme-')],
@@ -288,17 +1070,11 @@ def make_window(theme=None):
 			[sg.VSep(),sg.Text('Укажите регион(ы) через пробел:'), sg.InputText(key='-Region-',size=(28, 1)),sg.Text('График работы:'),sg.Combo(values=('Полный день','Сменный трафик', 'Гифкий график', 'Удаленная работа', 'Вахтовый метод'), readonly=True, key='-COMBO_time_work-',expand_x=True),sg.VSep()],
 			[sg.VSep(),sg.Text('Укажите уровень дохода от:'), sg.InputText(key='-Salary-',size=(32, 1)),sg.Text('Тип занятости:'),sg.Combo(values=('Полная занятость','Частичная занятость', 'Проектная работа', 'Стажировка', 'Волонтерство'), readonly=True, key='-COMBO_employment-',expand_x=True),sg.VSep()],
 			[sg.VSep(),sg.Text('Указан доход:'),sg.Checkbox('', default=False, key='-Checkbox-',expand_x=True),sg.VSep()],
+			[sg.VSep(),sg.Text('Валюта:'),sg.Combo(values=('RUB','EUR', 'USD'), readonly=True, key='-COMBO_valuta-',expand_x=True),sg.VSep()],
 			[sg.HSep()],
-			[sg.Table(values=data_table, headings=headings,  visible = False,  vertical_scroll_only = False, max_col_width=40,
-                    auto_size_columns=True,
-		    		right_click_selects=True,
-                    num_rows=20,
-		    		expand_x=True,
-					justification='center', key='-TABLE-',
-					selected_row_colors='red on yellow', 
-					enable_events=True)]]
+			[sg.TabGroup([[sg.Tab('Таблица', layout_tab1), sg.Tab('Статистика', tab6_layout)]])]]
 
-	window = sg.Window('Вакансии HH.RU', layout,size=(1000, 600))
+	window = sg.Window('Вакансии HH.RU', layout,size=(1200, 850))
 
 	return window
 
@@ -315,7 +1091,9 @@ def parse():
 			window.close()
 			window = make_window()
 		elif event == "Play":
-			th = Thread(target=main_parse, args=(values['-VAC-'], values['-PAGE-'], values['-Salary-'], values['-Checkbox-'], values['-Region-'], values['-COMBO-'],values['-COMBO_Exp-'], values['-COMBO_employment-'], values['-COMBO_time_work-'], data_table,window))
+			th = Thread(target=main_parse, args=(values['-VAC-'], values['-PAGE-'], values['-Salary-'], values['-Checkbox-'], 
+					values['-Region-'], values['-COMBO-'],values['-COMBO_Exp-'], values['-COMBO_employment-'], values['-COMBO_time_work-'],
+					values['-COMBO_valuta-'], data_table,window))
 			th.start()						
 	window.close()
 

@@ -47,6 +47,7 @@ def transliterate(name):
 def translite_region(name):
    # Слоаврь с заменами
    slovar = {
+	'ЕКБ' : '3',
     'СПБ': '2',
     'МСК': '1'
 	}
@@ -113,6 +114,8 @@ def get_response_resume(dict):
 		URL = URL
 	
 	for item in dict['area']:
+		if item == "3":
+			URL = URL + "&area=3"
 		if item == "2":
 			URL = URL + "&area=2"	
 		if item == "1":
@@ -525,7 +528,7 @@ def main_parse(resume, page, region, salary_before, salary_after, salary_checkbo
 	labels_age = 'До 20 лет', '20 - 30 лет', '30 - 40 лет', '40 - 50 лет','50 - 60 лет', 'От 60 лет', 'Не указан'
 	sizes_age = [age_20, age_20_30, age_30_40, age_40_50, age_50_60, age_more_60, age_no_age]
 	explode = (0.2, 0.2, 0.2, 0.2,0.2,0.2,0.2)
-	fig2 = plt.figure(figsize=(10, 8))
+	fig2 = plt.figure(figsize=(15, 10))
 	plt.title('Возраст (%)')
 	plt.pie(sizes_age, autopct='%1.1f%%', shadow=True, explode=explode, wedgeprops={'lw':1, 'ls':'--','edgecolor':"k"})
 	plt.legend(bbox_to_anchor = (0, 1.1),labels = labels_age)
@@ -555,12 +558,13 @@ def main_parse(resume, page, region, salary_before, salary_after, salary_checkbo
 	labels = 'Нет опыта работы', '1 - 3 год', '3 - 6 год', 'Более 6 лет'
 	sizes = [exp_no_age, exp_1_3, exp_3_6, exp_more_6]
 	explode = (0.2, 0.2, 0.2, 0.2)
-	fig1 = plt.figure(figsize=(10, 8))
+	fig1 = plt.figure(figsize=(15, 10))
 	plt.title('Требуемый опыт работы (%)')
 	plt.pie(sizes, autopct='%1.1f%%', shadow=True, explode=explode, wedgeprops={'lw':1, 'ls':'--','edgecolor':"k"})
 	plt.legend(bbox_to_anchor = (0.15, 1.1),labels = labels)
 	draw_figure(main_window['-CANVAS_circle-'].TKCanvas, fig1)
 	plt.close()
+	
 	for i in data:
 		if i['cash'].find("бел")!= -1:
 			head, sep, tail = i['cash'].partition('бел')
@@ -680,17 +684,142 @@ def main_parse(resume, page, region, salary_before, salary_after, salary_checkbo
 		"3 - 6 лет" : int(avg_3_6_cash),
 		"Более 6 лет" : int(avg_more_6_cash)
 	}
-	plt.figure(figsize=(10, 8))
+
+	
+	plt.figure(figsize=(5.5, 5))
 	courses = list(data_exp.keys())
 	values = list(data_exp.values())
 	barlot = plt.bar(courses, values, color ='blue', width = 0.3)
 	plt.bar_label(barlot,labels=values,label_type='edge')
-	plt.xlabel("Опыт работы")
-	plt.ylabel("Заработная плата")
 	plt.title("Средняя зарплата к опыту работы")	
 	fig = plt.gcf()    
-	figure_x, figure_y, figure_w, figure_h = fig.bbox.bounds
 	draw_figure(main_window['-CANVAS-'].TKCanvas, fig)
+	figure_x, figure_y, figure_w, figure_h = fig.bbox.bounds
+	plt.close()
+
+	cash_msk = []
+	cash_spb = []
+	cash_kazan = []
+	cash_ekb = []
+	cash_region = []
+
+	for i in data:
+		try:
+			if i['city'] == "Москва":
+				if i['cash'].find("руб")!= -1:
+					head, sep, tail = i['cash'].partition('руб')
+					cash_text_int_msk = int(head)
+					cash_msk.append(cash_text_int_msk)
+			if i['city'] == "Санкт-Петербург":
+				if i['cash'].find("руб")!= -1:
+					head, sep, tail = i['cash'].partition('руб')
+					cash_text_int_spb = int(head)
+					cash_spb.append(cash_text_int_spb)
+			if i['city'] == "Казань":
+				if i['cash'].find("руб")!= -1:
+					head, sep, tail = i['cash'].partition('руб')
+					cash_text_int_kaz = int(head)
+					cash_kazan.append(cash_text_int_kaz)
+			if i['city'] == "Екатеринбург":
+				if i['cash'].find("руб")!= -1:
+					head, sep, tail = i['cash'].partition('руб')
+					cash_text_int_ekb = int(head)
+					cash_ekb.append(cash_text_int_ekb)
+			if i['city'] != "Санкт-Петербург" and i['city'] != "Москва"and i['city'] != "Казань" and i['city'] != "Екатеринбург":
+				if i['cash'].find("бел")!= -1:
+					head, sep, tail = i['cash'].partition('бел')
+					cash_text_int_bel = int(head)
+					int_bel = cash_text_int_bel * 30.37
+					cash_region.append(int(int_bel))
+					continue
+				if i['cash'].find("руб")!= -1:
+					head, sep, tail = i['cash'].partition('руб')
+					cash_text_int_rub = int(head)
+					cash_region.append(cash_text_int_rub)
+				if i['cash'].find("KZT")!= -1:
+					head, sep, tail = i['cash'].partition('KZT')
+					cash_text_int_kzt = int(head)
+					int_kzt = cash_text_int_kzt * 0.17
+					cash_region.append(int(int_kzt))
+				if i['cash'].find("EUR")!= -1:
+					head, sep, tail = i['cash'].partition('EUR')
+					cash_text_int_eur = int(head)
+					int_eur = cash_text_int_eur * 80.37
+					cash_region.append(int(int_eur))
+		except:
+			pass
+			
+	
+	try:
+		avg_msk = sum(cash_msk)/len(cash_msk)
+	except ZeroDivisionError:
+		avg_msk = 0
+	try:
+		avg_spb = sum(cash_spb)/len(cash_spb)
+	except ZeroDivisionError:
+		avg_spb = 0
+	try:
+		avg_kazan = sum(cash_kazan)/len(cash_kazan)
+	except ZeroDivisionError:
+		avg_kazan = 0
+	try:
+		avg_ekb = sum(cash_ekb)/len(cash_ekb)
+	except ZeroDivisionError:
+		avg_ekb = 0
+	try:
+		avg_region = sum(cash_region)/len(cash_region)
+	except ZeroDivisionError:
+		avg_region = 0
+	
+
+	data_exp2 = {
+		"Москва" : int(avg_msk),
+		"Санкт-Петербург" : int(avg_spb),
+		"Казань" : int(avg_kazan),
+		"Екатеринбург" : int(avg_ekb),
+		"Регионы" : int(avg_region)
+	}
+
+
+	plt.figure(figsize=(6, 5))
+	courses_region = list(data_exp2.keys())
+	values_region = list(data_exp2.values())
+	barlot2 = plt.bar(courses_region, values_region, color ='blue', width = 0.3)
+	plt.bar_label(barlot2,labels=values_region,label_type='edge')
+	plt.title("Средняя зарплата по главным регионам")	
+	fig2 = plt.gcf()    
+	draw_figure(main_window['-CANVAS2-'].TKCanvas, fig2)
+	figure_x, figure_y, figure_w, figure_h = fig.bbox.bounds
+	plt.close()
+
+	A1 = 0
+	A2 = 0
+	B1 = 0
+	B2 = 0
+	C1 = 0
+	C2 = 0
+	for i in data:
+		if i['language'].find("Английский — A1")!= -1 or i['language'].find("English — A1")!= -1:
+			A1+=1
+		if i['language'].find("Английский — A2")!= -1 or i['language'].find("English — A2")!= -1:
+			A2+=1
+		if i['language'].find("Английский — B1")!= -1 or i['language'].find("English — B1")!= -1:
+			B1+=1
+		if i['language'].find("Английский — B2")!= -1 or i['language'].find("English — B2")!= -1:
+			B2+=1
+		if i['language'].find("Английский — C1")!= -1 or i['language'].find("English — C1")!= -1:
+			C1+=1
+		if i['language'].find("Английский — C2")!= -1 or i['language'].find("English — C2")!= -1:
+			C2+=1
+			
+	labels_language = 'A1 - начальный', 'А2 - элементарный', 'B1 -  средний', 'B2 -  средне-продвинутый','С1 -  продвинутый', 'С2 - в совершенстве'
+	sizes_language = [A1, A2, B1, B2, C1, C2]
+	explode = (0.2, 0.2, 0.2, 0.2,0.2,0.2)
+	fig_language = plt.figure(figsize=(15, 10))
+	plt.title('Распределение по английскому языку (%)')
+	plt.pie(sizes_language, autopct='%1.1f%%', shadow=True, explode=explode, wedgeprops={'lw':1, 'ls':'--','edgecolor':"k"})
+	plt.legend(bbox_to_anchor = (0, 1.1),labels = labels_language)
+	draw_figure(main_window['-CANVAS_circle_language-'].TKCanvas, fig_language)
 	plt.close()
 	
 	main_window['-TABLE-'].update(values=dict_table, visible=True)
@@ -728,16 +857,16 @@ def make_window(theme=None):
 		    [sg.Text('Диапозон: '),sg.Text('',key='-TEXT_diap-')],
 		    [sg.Text('Медиана зарплаты: '),sg.Text('',key='-TEXT_median-')],
 		    [sg.Text('Средняя зарплата: '),sg.Text('',key='-TEXT_avg-')],
-		    [sg.Canvas(key='-CANVAS-')]
+		    [sg.Canvas(key='-CANVAS-'),sg.Canvas(key='-CANVAS2-')]
 		    ]
 	
 	layout_tab_education = [
-			[sg.Text('Уровень образования',font='Helvetica 18 bold')],
-			
+			[sg.Text('Распределение по английскому языку',font='Helvetica 18 bold')],
+			[sg.Canvas(key='-CANVAS_circle_language-')]
 	]
 	
 	
-	tab_group = sg.TabGroup([[sg.Tab('Возраст', layout_tab_age)],[sg.Tab('Опыт работы', layout_tab_exp)],[sg.Tab('Анализ заработной платы', layout_tab_cash)],[sg.Tab('Уровень образования', layout_tab_education)]],border_width = 3)
+	tab_group = sg.TabGroup([[sg.Tab('Возраст', layout_tab_age)],[sg.Tab('Опыт работы', layout_tab_exp)],[sg.Tab('Анализ заработной платы', layout_tab_cash)],[sg.Tab('Анализ языка', layout_tab_education)]],border_width = 3)
 	tab6_layout = [[tab_group]]
 	layout = [ 
 			[sg.Button('Старт', button_color=('black','white'), key='Play'),sg.Button('Выход', button_color=('black','white'), key='-Stop-'),sg.Text('                                                                                                                                                                                   Тема:',justification='center'),sg.Combo(sg.theme_list(), default_value=sg.theme(), s=(15,22), enable_events=True, readonly=True, k='-Theme-')],
@@ -755,7 +884,7 @@ def make_window(theme=None):
 			[sg.TabGroup([[sg.Tab('Таблица', layout_tab1), sg.Tab('Статистика', tab6_layout)]])],
 			]
 	
-	window = sg.Window('Резюме HH.RU', layout,size=(1000, 850))	
+	window = sg.Window('Резюме HH.RU', layout,size=(1200, 850))
 	return window
 
 def parse():
