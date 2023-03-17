@@ -2,6 +2,7 @@ import csv
 import requests, random
 from bs4 import BeautifulSoup
 import config
+import json
 import json as js
 from colorama import Fore
 import datetime
@@ -258,7 +259,9 @@ def get_page_content(content_links,dict):
 						"skills" : result,
 						"link" : i["link"]
 					}
-				)			
+				)
+	with open('content.json', 'w', encoding='utf-8') as f:
+		json.dump(content1, f, ensure_ascii=False, indent=4)					
 	return content1
 		
 					
@@ -752,10 +755,7 @@ def main_parse(resume, page, salary,checkbox,  region, education, exp, employmen
 						prom = int(prom) * 80.37
 						data_cash_With_exp_more_6.append(int(prom))
 						continue
-
-				
-									
-						
+							
 		
 	try:
 		avg_more_6_cash = sum(data_cash_With_exp_more_6)/len(data_cash_With_exp_more_6)
@@ -1035,6 +1035,49 @@ def main_parse(resume, page, salary,checkbox,  region, education, exp, employmen
 	main_window['-TEXT_avg-'].update(f'{int(avg_cash)} руб.')
 	write_in_file(data,dict_1)
 
+
+def get_token():
+	with open('data.json', 'r') as fp:
+		new_data = json.load(fp)
+	params1 = {'grant_type': 'authorization_code ', 'client_id': 'M3RJAUA7MKSI9OFB32695SIBMR92DQMAQ54S9N97NPFC84F7QTE4G4V5PVKNG0BR', 'client_secret': 'OS8JE8DTVS9IDF0O9CD87DSAN9LO9H488RVM3TV235M9MTRR588PLKA538JSQ15R', 'code' : new_data[0]}
+	response = requests.post('https://hh.ru/oauth/token', params = params1) 
+	dict_response = response.text
+	parsed = json.loads(dict_response)
+	return parsed['access_token']
+
+def second_parse(dict_data,combo_resume):
+	with open('content.json', 'r',errors='ignore') as fp:
+		new_data = json.load(fp)
+	for i in new_data:
+		head, sep, tail = i['link'].partition('?')
+		head, sep, tail = head.partition('vacancy/')
+		params = {'resume_id': dict_data[combo_resume], 'vacancy_id': tail, 'message': 'Извините, это тестовое сообщение'}
+		response = requests.post('https://api.hh.ru/negotiations', headers = {'Authorization':f'Bearer {dict_data["Token"]}','Content-Type': 'multipart/form-data'}, params=params)
+		time.sleep(10)
+
+
+def make_win2():
+	data = []
+	data_dict = {}
+	token = get_token()
+	data_dict["Token"] = token
+	response = requests.get('https://api.hh.ru/resumes/mine', headers={'Authorization':f'Bearer {token}'})
+	resumes = response.json()
+	for resume in resumes['items']:
+		data.append(resume['title'])
+		data_dict[resume['title']] = resume['id']
+	layout = [[sg.Text('Выберите резюме:*'), sg.Combo(values=data, readonly=True, key='combo_resume',expand_x=True), sg.Button('Подтвердить',button_color=('black','white'), key='-Accept-')]]
+	window = sg.Window('Отклик на вакансии', layout, finalize=True)
+	while True:
+		event, values = window.read()
+		if event == sg.WIN_CLOSED : # if user closes window or clicks cancel
+			break
+		elif event == '-Accept-':
+			th1 = Thread(target=second_parse, args=(data_dict,values['combo_resume'],))
+			th1.start()			
+	return window
+	
+
 def make_window(theme=None):
 	sg.theme(theme)
 	headings = ["Должность", "Компания", "Зарплата", "Опыт работы", "Описание", "Город","Адрес", "Тип занятости", "Ключевые навыки", "Ссылка"]
@@ -1063,7 +1106,7 @@ def make_window(theme=None):
 	tab6_layout = [[tab_group]]
 	layout = [ 
 			#[sg.Menu(menu_def, key='-MENU-')],
-			[sg.Button('Старт', button_color=('black','white'), key='Play'),sg.Button('Выход', button_color=('black','white'), key='-Stop-'), sg.Text('                                                                                                                                                                                   Тема:',justification='center'),sg.Combo(sg.theme_list(), default_value=sg.theme(), s=(15,22), enable_events=True, readonly=True, k='-Theme-')],
+			[sg.Button('Старт', button_color=('black','white'), key='Play'),sg.Button('Выход', button_color=('black','white'), key='-Stop-'), sg.Button('Откликнуться на все вакансии', button_color=('black','white'), key='otklic'), sg.Text('                                                                                                                                                                                   Тема:',justification='center'),sg.Combo(sg.theme_list(), default_value=sg.theme(), s=(15,22), enable_events=True, readonly=True, k='-Theme-')],
 			[sg.HSep()],
 			[sg.VSep(),sg.Text('Введите вакансию:'), sg.InputText(key='-VAC-',size=(40, 1)),sg.Text('Образование:'),sg.Combo(values=('Не требуется или не указано','Высшее', 'Среднее профессиональное'),  readonly=True, key='-COMBO-',expand_x=True),sg.VSep()],
 			[sg.VSep(),sg.Text('Количество страниц (1 страница = 20 вакансий):'), sg.InputText(key='-PAGE-',size=(15, 1)),sg.Text('Опыт работы:'),sg.Combo(values=('Не имеет значения','От 1 до года до 3 лет', 'От 3 до 6 лет', 'Нет опыта', 'Больше 6 лет'), readonly=True, key='-COMBO_Exp-',expand_x=True),sg.VSep()],
@@ -1079,9 +1122,11 @@ def make_window(theme=None):
 	return window
 
 
+
 def parse():
 	data_table = []
 	window = make_window()	
+	window2 = None
 	while True:
 		event, values = window.read()
 		if event == sg.WIN_CLOSED or event == '-Stop-': # if user closes window or clicks cancel
@@ -1094,7 +1139,9 @@ def parse():
 			th = Thread(target=main_parse, args=(values['-VAC-'], values['-PAGE-'], values['-Salary-'], values['-Checkbox-'], 
 					values['-Region-'], values['-COMBO-'],values['-COMBO_Exp-'], values['-COMBO_employment-'], values['-COMBO_time_work-'],
 					values['-COMBO_valuta-'], data_table,window))
-			th.start()						
+			th.start()	
+		elif event == "otklic":
+			window2 = make_win2()				
 	window.close()
 
 parse()	

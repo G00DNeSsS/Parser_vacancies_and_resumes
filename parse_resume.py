@@ -8,6 +8,7 @@ import datetime
 import PySimpleGUI as sg
 import time
 from threading import Thread
+import ast
 import re
 import statistics
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
@@ -891,7 +892,6 @@ def parse():
 	data_table = []
 	window = make_window()		
 	while True:
-		
 		event, values = window.read()
 		if event == sg.WIN_CLOSED or event == '-Stop-': # if user closes window or clicks cancel
 			break
