@@ -1037,7 +1037,7 @@ def main_parse(resume, page, salary,checkbox,  region, education, exp, employmen
 
 
 def get_token():
-	with open('data.json', 'r') as fp:
+	with open('data.json', 'r',) as fp:
 		new_data = json.load(fp)
 	params1 = {'grant_type': 'authorization_code ', 'client_id': 'M3RJAUA7MKSI9OFB32695SIBMR92DQMAQ54S9N97NPFC84F7QTE4G4V5PVKNG0BR', 'client_secret': 'OS8JE8DTVS9IDF0O9CD87DSAN9LO9H488RVM3TV235M9MTRR588PLKA538JSQ15R', 'code' : new_data[0]}
 	response = requests.post('https://hh.ru/oauth/token', params = params1) 
@@ -1045,38 +1045,86 @@ def get_token():
 	parsed = json.loads(dict_response)
 	return parsed['access_token']
 
-def second_parse(dict_data,combo_resume):
-	with open('content.json', 'r',errors='ignore') as fp:
+def second_parse(window,dict_data,combo_resume,combo_vac,Multiline_text):
+	
+	with open('content.json', 'r',errors='ignore',encoding = 'utf-8') as fp:
 		new_data = json.load(fp)
-	for i in new_data:
-		head, sep, tail = i['link'].partition('?')
-		head, sep, tail = head.partition('vacancy/')
-		params = {'resume_id': dict_data[combo_resume], 'vacancy_id': tail, 'message': 'Извините, это тестовое сообщение'}
+	if combo_vac == 'Все вакансии':
+		for i in new_data:
+			head, sep, tail = i['link'].partition('?')
+			head, sep, tail = head.partition('vacancy/')
+			print(Multiline_text)
+			params = {'resume_id': dict_data[combo_resume], 'vacancy_id': tail, 'message': Multiline_text}
+			response = requests.post('https://api.hh.ru/negotiations', headers = {'Authorization':f'Bearer {dict_data["Token"]}','Content-Type': 'multipart/form-data'}, params=params)
+			if response.status_code == 201:
+				msg = f'Отклик на вакансию "{i["name"]}" - успешно отправлен.'
+				print(msg)
+				window['-TEXT_response-'].update(msg)
+			if response.status_code == 400:
+				msg = f'Отклик на вакансию "{i["name"]}" - не был отправлен.'
+				print(msg)
+				window['-TEXT_response-'].update(msg)
+			if response.status_code == 403:
+				msg = f'Отклик на вакансию "{i["name"]}" - не был отправлен по причине отстутствия доступа к ней, отклик был сделан ранее или видимость резюме не позволяет откликнуться на вакансию.'
+				print(msg)
+				window['-TEXT_response-'].update(msg)
+			time.sleep(10)
+	else:
+		head, sep, tail = combo_vac.partition(')')
+		head, sep, tail = head.partition('(')
+		id = tail
+		params = {'resume_id': dict_data[combo_resume], 'vacancy_id': id, 'message': Multiline_text}
 		response = requests.post('https://api.hh.ru/negotiations', headers = {'Authorization':f'Bearer {dict_data["Token"]}','Content-Type': 'multipart/form-data'}, params=params)
-		time.sleep(10)
+		if response.status_code == 201:
+			msg = f'Отклик на вакансию "{combo_vac}" - успешно отправлен.'
+			print(msg)
+			window['-TEXT_response-'].update(msg)
+		if response.status_code == 400:
+			msg = f'Отклик на вакансию "{combo_vac}" - не был отправлен.'
+			print(msg)
+			window['-TEXT_response-'].update(msg)
+		if response.status_code == 403:
+			msg = f'Отклик на вакансию "{combo_vac}" - не был отправлен по причине отстутствия доступа к ней, отклик был сделан ранее или видимость резюме не позволяет откликнуться на вакансию.'
+			print(msg)
+			window['-TEXT_response-'].update(msg)
 
 
 def make_win2():
 	data = []
+	data_name = []
 	data_dict = {}
 	token = get_token()
 	data_dict["Token"] = token
 	response = requests.get('https://api.hh.ru/resumes/mine', headers={'Authorization':f'Bearer {token}'})
 	resumes = response.json()
+	data_name.append('Все вакансии')
 	for resume in resumes['items']:
 		data.append(resume['title'])
 		data_dict[resume['title']] = resume['id']
-	layout = [[sg.Text('Выберите резюме:*'), sg.Combo(values=data, readonly=True, key='combo_resume',expand_x=True), sg.Button('Подтвердить',button_color=('black','white'), key='-Accept-')]]
-	window = sg.Window('Отклик на вакансии', layout, finalize=True)
+		data_dict['name'] = resume['id']
+	with open('content.json', 'r',errors='ignore',encoding = 'utf-8') as fp:
+		new_data = json.load(fp)
+	for i in new_data:
+		head, sep, tail = i['link'].partition('?')
+		head, sep, tail = head.partition('vacancy/')
+		data_name.append(i['name'] + '(' + tail + ')')
+	layout = [
+	[sg.Text('Выберите резюме:'), sg.Combo(values=data, readonly=True, key='combo_resume',expand_x = True)],
+	[sg.Text('Выберите вакансию:'), sg.Combo(values=data_name, readonly=True, key='combo_vac',expand_x = True)],
+	[sg.Multiline(s=(500,10),key = 'Multiline_text')],
+	[sg.Button('Подтвердить',button_color=('black','white'), key='-Accept-')],
+	[sg.Output(key='-TEXT_response-', expand_x=True, expand_y = True)]
+	]
+	window = sg.Window('Отклик на вакансии', layout, finalize=True,size=(700, 500))
 	while True:
 		event, values = window.read()
 		if event == sg.WIN_CLOSED : # if user closes window or clicks cancel
 			break
 		elif event == '-Accept-':
-			th1 = Thread(target=second_parse, args=(data_dict,values['combo_resume'],))
+			th1 = Thread(target=second_parse, args=(window,data_dict,values['combo_resume'],values['combo_vac'],values['Multiline_text'],))
 			th1.start()			
 	return window
-	
+
 
 def make_window(theme=None):
 	sg.theme(theme)
@@ -1106,7 +1154,7 @@ def make_window(theme=None):
 	tab6_layout = [[tab_group]]
 	layout = [ 
 			#[sg.Menu(menu_def, key='-MENU-')],
-			[sg.Button('Старт', button_color=('black','white'), key='Play'),sg.Button('Выход', button_color=('black','white'), key='-Stop-'), sg.Button('Откликнуться на все вакансии', button_color=('black','white'), key='otklic'), sg.Text('                                                                                                                                                                                   Тема:',justification='center'),sg.Combo(sg.theme_list(), default_value=sg.theme(), s=(15,22), enable_events=True, readonly=True, k='-Theme-')],
+			[sg.Button('Старт', button_color=('black','white'), key='Play'),sg.Button('Выход', button_color=('black','white'), key='-Stop-'), sg.Button('Откликнуться на вакансию(и)', button_color=('black','white'), key='otklic'), sg.Text('                                                                                                                                                                                   Тема:',justification='center'),sg.Combo(sg.theme_list(), default_value=sg.theme(), s=(15,22), enable_events=True, readonly=True, k='-Theme-')],
 			[sg.HSep()],
 			[sg.VSep(),sg.Text('Введите вакансию:'), sg.InputText(key='-VAC-',size=(40, 1)),sg.Text('Образование:'),sg.Combo(values=('Не требуется или не указано','Высшее', 'Среднее профессиональное'),  readonly=True, key='-COMBO-',expand_x=True),sg.VSep()],
 			[sg.VSep(),sg.Text('Количество страниц (1 страница = 20 вакансий):'), sg.InputText(key='-PAGE-',size=(15, 1)),sg.Text('Опыт работы:'),sg.Combo(values=('Не имеет значения','От 1 до года до 3 лет', 'От 3 до 6 лет', 'Нет опыта', 'Больше 6 лет'), readonly=True, key='-COMBO_Exp-',expand_x=True),sg.VSep()],
@@ -1120,7 +1168,6 @@ def make_window(theme=None):
 	window = sg.Window('Вакансии HH.RU', layout,size=(1200, 850))
 
 	return window
-
 
 
 def parse():
