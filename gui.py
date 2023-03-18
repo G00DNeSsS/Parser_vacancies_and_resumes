@@ -25,35 +25,35 @@ def selenium():
 		print(link)
 		browser.get("https://hh.ru/oauth/authorize?response_type=code&client_id=M3RJAUA7MKSI9OFB32695SIBMR92DQMAQ54S9N97NPFC84F7QTE4G4V5PVKNG0BR")
 
-
-	
-
 def init():
-	
 	sg.theme('Dark Amber') 
 	data = []
 	layout = [[sg.Text('Parser HH.RU',font='Helvetica 26 bold')],
-	[sg.Button('Вакансии', button_color=('black','white'), size=(30,2),border_width=4,key='Vac', font='Helvetica 10 bold'),sg.Button('Резюме', button_color=('black','white'),border_width=4, size=(30,2), key='Resume', font='Helvetica 10 bold')],
-	[sg.Button('Войти в личный кабинет', button_color=('black','white'), size=(30,2),border_width=4,key='LK', font='Helvetica 10 bold')],
-	[sg.InputText(key='token',size=(50, 2))]
+	[sg.Button('Войти в личный кабинет', button_color=('black','white'), size=(43,2),border_width=4,key='LK', font='Helvetica 10 bold')],
+	[sg.InputText(key='token',size=(50, 2))],
+	[sg.Button('Подтвердить', button_color=('black','white'), size=(43,2),border_width=4,key='Accpets', font='Helvetica 10 bold',visible = True)],
+	[sg.Button('Вакансии', button_color=('black','white'), size=(30,2),border_width=4,key='Vac', font='Helvetica 10 bold',visible = False),sg.Button('Резюме', button_color=('black','white'),border_width=4, size=(30,2), key='Resume', font='Helvetica 10 bold',visible = False)]
 	]
 	
-	window = sg.Window('Parser HH.RU', layout,size=(1000, 600),element_justification='c',margins=(0,200))
+	window = sg.Window('Parser HH.RU', layout,size=(1000, 600),element_justification='c',margins=(0,150))
 	while True:
 		event, values = window.read()
 		if event == sg.WIN_CLOSED or event == '-Stop-': # if user closes window or clicks cancel
 			break
 		elif event == "Vac":
 			window.close()
-			data.append(values['token'])
-			with open('data.json', 'w', encoding='utf-8') as f:
-				json.dump(data, f, ensure_ascii=False, indent=4)
 			import parse_vac
 		elif event == "Resume":
 			window.close()
 			import parse_resume
 		elif event == "LK":
 			th = Thread(target=selenium)
-			th.start()		
+			th.start()
+		elif event == "Accpets":
+			data.append(values['token'])
+			with open('data.json', 'w', encoding='utf-8') as f:
+				json.dump(data, f, ensure_ascii=False, indent=4)	
+			window['Vac'].update(visible=True)
+			window['Resume'].update(visible=True)			
 	window.close()
 init()
