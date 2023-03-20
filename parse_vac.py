@@ -18,6 +18,11 @@ import matplotlib.pyplot as plt
 import matplotlib
 matplotlib.use('Agg')
 import pylab
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service as ChromeService
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 
         
 proxies = {
@@ -1039,14 +1044,9 @@ def main_parse(resume, page, salary,checkbox,  region, education, exp, employmen
 def get_token():
 	with open('data.json', 'r',) as fp:
 		new_data = json.load(fp)
-	params1 = {'grant_type': 'authorization_code ', 'client_id': 'M3RJAUA7MKSI9OFB32695SIBMR92DQMAQ54S9N97NPFC84F7QTE4G4V5PVKNG0BR', 'client_secret': 'OS8JE8DTVS9IDF0O9CD87DSAN9LO9H488RVM3TV235M9MTRR588PLKA538JSQ15R', 'code' : new_data[0]}
-	response = requests.post('https://hh.ru/oauth/token', params = params1) 
-	dict_response = response.text
-	parsed = json.loads(dict_response)
-	return parsed['access_token']
+	return new_data[0]
 
 def second_parse(window,dict_data,combo_resume,combo_vac,Multiline_text):
-	
 	with open('content.json', 'r',errors='ignore',encoding = 'utf-8') as fp:
 		new_data = json.load(fp)
 	if combo_vac == 'Все вакансии':
@@ -1126,8 +1126,27 @@ def make_win2():
 	return window
 
 
+def open_vac(counter):
+	try:
+		file1 = open('content.json', 'r',errors='ignore',encoding = 'utf-8')
+	except FileNotFoundError:
+		print('Контента нет')
+	with file1 as fp:
+		new_data = json.load(fp)
+	link = new_data[int(counter)]['link']
+	if link:
+		chrome_options = Options()
+		chrome_options = webdriver.ChromeOptions()
+		chrome_options.add_experimental_option("detach", True)
+		browser = webdriver.Chrome('chromedriver.exe', chrome_options=chrome_options)
+		browser.get(link)
+	else:
+		print("Нет ссылки")
+	
+
 def make_window(theme=None):
 	sg.theme(theme)
+	right_click_menu = ['', ['Открыть вакансию в браузере']]
 	headings = ["Должность", "Компания", "Зарплата", "Опыт работы", "Описание", "Город","Адрес", "Тип занятости", "Ключевые навыки", "Ссылка"]
 	data_table = []
 	#menu_def=['&File', ['&New File', '&Open...','Open &Module','---', '!&Recent Files','C&lose']],['&Save',['&Save File', 'Save &As','Save &Copy'  ]],['&Edit', ['&Cut', '&Copy', '&Paste']]
@@ -1138,6 +1157,7 @@ def make_window(theme=None):
 		    		expand_x = True,
 					justification='center', key='-TABLE-',
 					selected_row_colors='red on yellow', 
+					enable_click_events=True, 
 					enable_events=True)]]
 	layout_tab_exp = [
 			[sg.Text('Опыт работы',font='Helvetica 18 bold')],
@@ -1165,8 +1185,8 @@ def make_window(theme=None):
 			[sg.HSep()],
 			[sg.TabGroup([[sg.Tab('Таблица', layout_tab1), sg.Tab('Статистика', tab6_layout)]])]]
 
-	window = sg.Window('Вакансии HH.RU', layout,size=(1200, 850))
-
+	window = sg.Window('Вакансии HH.RU', layout, finalize=True, right_click_menu=right_click_menu, size=(1200, 850))
+	
 	return window
 
 
@@ -1176,12 +1196,17 @@ def parse():
 	window2 = None
 	while True:
 		event, values = window.read()
+		if isinstance(event, tuple): 
+			answer = event[2][0]
 		if event == sg.WIN_CLOSED or event == '-Stop-': # if user closes window or clicks cancel
 			break
 		if values['-Theme-'] != sg.theme():
 			sg.theme(values['-Theme-'])
 			window.close()
 			window = make_window()
+		if event == 'Открыть вакансию в браузере':
+			th2 = Thread(target=open_vac, args=(answer,))
+			th2.start()
 		elif event == "Play":
 			th = Thread(target=main_parse, args=(values['-VAC-'], values['-PAGE-'], values['-Salary-'], values['-Checkbox-'], 
 					values['-Region-'], values['-COMBO-'],values['-COMBO_Exp-'], values['-COMBO_employment-'], values['-COMBO_time_work-'],
